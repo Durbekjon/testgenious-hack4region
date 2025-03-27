@@ -10,6 +10,14 @@ import { Logger, BadRequestException } from '@nestjs/common';
 import { EVENTS } from './events';
 import { GeminiFlashService } from './services/gemini-flash.service';
 
+interface IPayload {
+  subject: string;
+  topic: string;
+  difficulty_level: string;
+  test_format: string;
+  number_of_questions: number;
+  user_prompt: string;
+}
 @WebSocketGateway({
   cors: {
     origin: ['http://localhost:3000', 'http://localhost:3001'],
@@ -26,21 +34,22 @@ export class TestGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   async handleConnection(client: Socket) {
     this.logger.log(`Client connected: ${client.id}`);
-    try {
-      const test = await this.geminiFlashService.generateTest(
-        'Math',
-        'Algebra',
-        'Easy',
-        'Multiple Choice',
-        30,
-        'English',
-      );
-      this.logger.log('Test generated successfully', test);
-      client.emit('testGenerated', test);
-    } catch (error) {
-      this.logger.error('Error generating test:', error);
-      client.emit('error', { message: 'Failed to generate test' });
-    }
+    return;
+    // try {
+    // const test = await this.geminiFlashService.generateTest(
+    //   'Math',
+    //   'Algebra',
+    //   'Easy',
+    //   'Multiple Choice',
+    //   30,
+    //   'English',
+    // );
+    // this.logger.log('Test generated successfully', test);
+    // client.emit(EVENTS.TEST_CREATED, test);
+    // } catch (error) {
+    //   this.logger.error('Error generating test:', error);
+    //   client.emit(EVENTS.ERROR, { message: 'Failed to generate test' });
+    // }
   }
 
   handleDisconnect(client: Socket) {
@@ -52,17 +61,8 @@ export class TestGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage(EVENTS.CREATE_TEST_BY_FORM)
-  async handleCreateTestByForm(
-    client: Socket,
-    payload: {
-      subject: string;
-      topic: string;
-      difficulty_level: string;
-      test_format: string;
-      number_of_questions: number;
-      user_prompt: string;
-    },
-  ) {
+  async handleCreateTestByForm(client: Socket, payload: IPayload) {
+    console.log(payload);
     try {
       const requiredFields = [
         'subject',
@@ -80,16 +80,51 @@ export class TestGateway implements OnGatewayConnection, OnGatewayDisconnect {
         `Client ${client.id} created test: ${payload.subject} - ${payload.topic}`,
       );
 
-      const test = await this.geminiFlashService.generateTest(
-        payload.subject,
-        payload.topic,
-        payload.difficulty_level,
-        payload.test_format,
-        payload.number_of_questions,
-        payload.user_prompt,
-      );
+      let continueGenerating = true;
+      let generatedPart = 1;
+      let totalParts = 1;
+      let testId = null;
 
-      client.emit(EVENTS.TEST_CREATED, test);
+      while (continueGenerating) {
+        const test = await this.geminiFlashService.generateTest(
+          payload.subject,
+          payload.topic,
+          payload.difficulty_level,
+          payload.test_format,
+          payload.number_of_questions,
+          payload.user_prompt,
+        );
+
+        if (!testId) {
+          testId = test.test_id;
+        }
+
+        generatedPart = test.generated_part;
+        totalParts = test.total_parts;
+        continueGenerating = test.continue;
+
+        console.log(`Generated part ${generatedPart}/${totalParts}`);
+        client.emit(EVENTS.TEST_CREATED, test);
+
+        if (continueGenerating) {
+          // Keyingi qismni generatsiya qilish
+          const nextPart = await this.geminiFlashService.continueTest(
+            testId,
+            generatedPart + 1,
+            totalParts,
+          );
+
+          // AI natijasini JSON formatga o‘tkazish
+          const parsedNextPart = JSON.parse(nextPart);
+          parsedNextPart.test_id = testId; // Test ID'ni bir xil saqlaymiz
+
+          continueGenerating = parsedNextPart.continue;
+          console.log(
+            `Continuing to part ${parsedNextPart.generated_part}/${parsedNextPart.total_parts}`,
+          );
+          client.emit(EVENTS.TEST_CREATED, parsedNextPart);
+        }
+      }
     } catch (error) {
       this.logger.error(`Error creating test: ${error.message}`);
       client.emit(EVENTS.ERROR, { message: error.message });
@@ -115,30 +150,30 @@ export class TestGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  @SubscribeMessage('joinTest')
+  @SubscribeMessage(EVENTS.JOIN_TEST)
   handleJoinTest(client: Socket, payload: { testId: string }) {
     client.join(`test:${payload.testId}`);
     this.logger.log(`Client ${client.id} joined test: ${payload.testId}`);
-    return { event: 'joinTest', data: { testId: payload.testId } };
+    return { event: EVENTS.JOIN_TEST, data: { testId: payload.testId } };
   }
 
-  @SubscribeMessage('leaveTest')
+  @SubscribeMessage(EVENTS.LEAVE_TEST)
   handleLeaveTest(client: Socket, payload: { testId: string }) {
     client.leave(`test:${payload.testId}`);
     this.logger.log(`Client ${client.id} left test: ${payload.testId}`);
-    return { event: 'leaveTest', data: { testId: payload.testId } };
+    return { event: EVENTS.LEAVE_TEST, data: { testId: payload.testId } };
   }
 
-  @SubscribeMessage('submitAnswer')
+  @SubscribeMessage(EVENTS.SUBMIT_ANSWER)
   handleSubmitAnswer(client: Socket, payload: { testId: string; answer: any }) {
     this.server.to(`test:${payload.testId}`).emit('answerSubmitted', {
       clientId: client.id,
       answer: payload.answer,
     });
-    return { event: 'submitAnswer', data: { testId: payload.testId } };
+    return { event: EVENTS.SUBMIT_ANSWER, data: { testId: payload.testId } };
   }
 
-  @SubscribeMessage('testProgress')
+  @SubscribeMessage(EVENTS.TEST_PROGRESS)
   handleTestProgress(
     client: Socket,
     payload: { testId: string; progress: number },
@@ -148,7 +183,7 @@ export class TestGateway implements OnGatewayConnection, OnGatewayDisconnect {
       progress: payload.progress,
     });
     return {
-      event: 'testProgress',
+      event: EVENTS.TEST_PROGRESS,
       data: { testId: payload.testId, progress: payload.progress },
     };
   }

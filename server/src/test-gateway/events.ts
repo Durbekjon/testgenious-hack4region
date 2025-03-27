@@ -14,4 +14,8 @@ export const EVENTS = {
   CREATE_TEST_BY_BOOK: 'create:test:by:book',
   CREATE_TEST_BY_FORM: 'create:test:by:form',
   ERROR: 'error',
+  JOIN_TEST: 'join:test',
+  LEAVE_TEST: 'leave:test',
+  TEST_PROGRESS: 'test:progress',
+  SUBMIT_ANSWER: 'submit:answer',
 };

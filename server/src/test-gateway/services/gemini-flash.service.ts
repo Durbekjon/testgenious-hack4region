@@ -46,11 +46,13 @@ export class GeminiFlashService {
                  { "id": "d1", "text": "Option 4" }
                ],
                "correct_answer_id": "a1",
-               "options_order": ["b1", "a1", "d1", "c1"]
+               "options_order": ["b1", "a1", "d1", "c1"],
+               "explanation": "Detailed explanation of why option 'a1' is the correct answer."
              }
            ],
            "continue": false
          }`;
+
     const response = await this.ai.models.generateContent({
       model: this.model,
       contents: [
@@ -60,7 +62,7 @@ export class GeminiFlashService {
         },
       ],
     });
-    const result = response.candidates[0].content.parts[0].text
+    const result = response.candidates[0].content.parts[0].text;
     if (result.includes('```json')) {
       return JSON.parse(result.replace('```json', '').replace('```', ''));
     }
