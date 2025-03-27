@@ -1,0 +1,17 @@
+export const EVENTS = {
+  TEST_CREATED: 'test:created',
+  TEST_UPDATED: 'test:updated',
+  TEST_DELETED: 'test:deleted',
+  USER_JOINED_TEST: 'user:joined:test',
+  USER_LEFT_TEST: 'user:left:test',
+  USER_USED_A_CHEAT: 'user:used:a:cheat',
+  USER_SUBMITTED_ANSWER: 'user:submitted:answer',
+  USER_GOT_SCORE: 'user:got:score',
+  USER_FINISHED_TEST: 'user:finished:test',
+  USER_GOT_A_BADGE: 'user:got:a:badge',
+  PROGRESS_UPDATED: 'progress:updated',
+  ANSWER_SUBMITTED: 'answer:submitted',
+  CREATE_TEST_BY_BOOK: 'create:test:by:book',
+  CREATE_TEST_BY_FORM: 'create:test:by:form',
+  ERROR: 'error',
+};

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebSocket Test</title>
+  </head>
+  <body>
+    <h2>WebSocket Test Platform</h2>
+
+    <button onclick="connectWebSocket()">Connect</button>
+    <button onclick="disconnectWebSocket()">Disconnect</button>
+
+    <h3>Create Test</h3>
+    <button onclick="createTestByForm()">Create Test (Form)</button>
+    <button onclick="createTestByBook()">Create Test (Book)</button>
+
+    <h3>Join/Leave Test</h3>
+    <button onclick="joinTest()">Join Test</button>
+    <button onclick="leaveTest()">Leave Test</button>
+
+    <h3>Submit Answer</h3>
+    <button onclick="submitAnswer()">Submit Answer</button>
+
+    <h3>Get Score</h3>
+    <button onclick="getScore()">Get Score</button>
+
+    <h3>Logs</h3>
+    <pre id="logs"></pre>
+
+    <script>
+      let socket;
+
+      function log(message) {
+        document.getElementById('logs').textContent += message + '\n';
+      }
+
+      function connectWebSocket() {
+        socket = io('http://localhost:4000', {
+          transports: ['websocket'],
+          withCredentials: true,
+        });
+
+        socket.on('connect', () => {
+          log('Connected: ' + socket.id);
+        });
+
+        socket.on('disconnect', () => {
+          log('Disconnected');
+        });
+
+        socket.on('TEST_CREATED', (data) => {
+          log('Test Created: ' + JSON.stringify(data));
+        });
+
+        socket.on('USER_JOINED_TEST', (data) => {
+          log('User Joined: ' + JSON.stringify(data));
+        });
+
+        socket.on('USER_LEFT_TEST', (data) => {
+          log('User Left: ' + JSON.stringify(data));
+        });
+
+        socket.on('ANSWER_SUBMITTED', (data) => {
+          log('Answer Submitted: ' + JSON.stringify(data));
+        });
+
+        socket.on('PROGRESS_UPDATED', (data) => {
+          log('Progress Updated: ' + JSON.stringify(data));
+        });
+
+        socket.on('ERROR', (data) => {
+          log('Error: ' + JSON.stringify(data));
+        });
+      }
+
+      function disconnectWebSocket() {
+        if (socket) {
+          socket.disconnect();
+          log('Disconnected from server');
+        }
+      }
+
+      function createTestByForm() {
+        const testData = {
+          subject: 'Math',
+          topic: 'Algebra',
+          difficulty_level: 'Easy',
+          test_format: 'Multiple Choice',
+          number_of_questions: 5,
+          user_prompt: 'Generate an easy Algebra test with 5 questions',
+        };
+        socket.emit('CREATE_TEST_BY_FORM', testData);
+      }
+
+      function createTestByBook() {
+        const bookData = {
+          testId: 'test-123',
+        };
+        socket.emit('CREATE_TEST_BY_BOOK', bookData);
+      }
+
+      function joinTest() {
+        const joinData = {
+          testId: 'test-123',
+        };
+        socket.emit('USER_JOINED_TEST', joinData);
+      }
+
+      function leaveTest() {
+        const leaveData = {
+          testId: 'test-123',
+        };
+        socket.emit('USER_LEFT_TEST', leaveData);
+      }
+
+      function submitAnswer() {
+        const answerData = {
+          testId: 'test-123',
+          answer: 'B',
+        };
+        socket.emit('USER_SUBMITTED_ANSWER', answerData);
+      }
+
+      function getScore() {
+        const scoreData = {
+          testId: 'test-123',
+          score: 85,
+          progress: '85%',
+        };
+        socket.emit('USER_GOT_SCORE', scoreData);
+      }
+    </script>
+
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+  </body>
+</html>
