@@ -20,7 +20,7 @@ interface IPayload {
 }
 @WebSocketGateway({
   cors: {
-    origin: ['http://localhost:3000', 'http://localhost:3001'],
+    origin: ['*'],
     credentials: true,
   },
 })
@@ -94,6 +94,8 @@ export class TestGateway implements OnGatewayConnection, OnGatewayDisconnect {
           payload.number_of_questions,
           payload.user_prompt,
         );
+
+        console.log(test);
 
         if (!testId) {
           testId = test.test_id;

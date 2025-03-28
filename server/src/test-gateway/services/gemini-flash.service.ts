@@ -66,6 +66,7 @@ export class GeminiFlashService {
     if (result.includes('```json')) {
       return JSON.parse(result.replace('```json', '').replace('```', ''));
     }
+    console.log(result);
     return result;
   }
 

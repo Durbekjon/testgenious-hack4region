@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,4 +5,44 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model Test {
+  id        String     @id @default(uuid())
+  title     String
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  questions Question[]
+
+  @@map("tests")
+}
+
+model Question {
+  id              String       @id @default(uuid())
+  text            String
+  type            QuestionType
+  correctAnswerId String
+  explanation     String?
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  test            Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
+  testId          String
+  options         Option[]
+
+  @@map("questions")
+}
+
+model Option {
+  id         String   @id @default(uuid())
+  text       String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  questionId String
+
+  @@map("options")
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
 }
