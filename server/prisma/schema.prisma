@@ -13,19 +13,19 @@ model Test {
   createdAt DateTime   @default(now()) @map("created_at")
   updatedAt DateTime   @updatedAt @map("updated_at")
   questions Question[]
+  tempCode  TempCode?
 
   @@map("tests")
 }
 
 model Question {
-  id              String       @id @default(uuid())
-  text            String
-  type            QuestionType
+  id              String   @id @default(uuid())
+  question        String
   correctAnswerId String
   explanation     String?
-  createdAt       DateTime     @default(now()) @map("created_at")
-  updatedAt       DateTime     @updatedAt @map("updated_at")
-  test            Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  test            Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
   testId          String
   options         Option[]
 
@@ -41,8 +41,12 @@ model Option {
   @@map("options")
 }
 
-enum QuestionType {
-  MULTIPLE_CHOICE
-  TRUE_FALSE
-  SHORT_ANSWER
+model TempCode {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  code      Int      @unique
+  testId    String   @unique
+  test      Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@map("temporary_codes")
 }

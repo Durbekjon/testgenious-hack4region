@@ -63,9 +63,21 @@ export class GeminiFlashService {
       ],
     });
     const result = response.candidates[0].content.parts[0].text;
+    console.log(result);
     if (result.includes('```json')) {
-      return JSON.parse(result.replace('```json', '').replace('```', ''));
+      const jsonText = result
+        .replace(/```json/g, '') // "```json" ni olib tashlaymiz
+        .replace(/```/g, '') // JSON oxiridagi "```" ni olib tashlaymiz
+        .trim(); // Ortib qolgan bo‘sh joylarni olib tashlaymiz
+
+      try {
+        return JSON.parse(jsonText);
+      } catch (error) {
+        console.error('JSON Parsing Error:', error);
+        return null;
+      }
     }
+
     console.log(result);
     return result;
   }

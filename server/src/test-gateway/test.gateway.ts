@@ -9,6 +9,7 @@ import { Server, Socket } from 'socket.io';
 import { Logger, BadRequestException } from '@nestjs/common';
 import { EVENTS } from './events';
 import { GeminiFlashService } from './services/gemini-flash.service';
+import { TestService } from 'src/platform-api/test/test.service';
 
 interface IPayload {
   subject: string;
@@ -18,6 +19,33 @@ interface IPayload {
   number_of_questions: number;
   user_prompt: string;
 }
+
+interface OnlineTestExam {
+  id: string;
+  isStarted: boolean;
+  isFinished: boolean;
+  time: string;
+  startTime?: Date;
+  endTime?: Date;
+  participants: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    score?: number;
+    isFinished?: boolean;
+    isCheating?: boolean;
+  }[];
+  questions: any[];
+  results?: {
+    userId: string;
+    score: number;
+    submittedAt: Date;
+  }[];
+  isPublic?: boolean;
+  isLive?: boolean;
+}
+
 @WebSocketGateway({
   cors: {
     origin: ['*'],
@@ -29,40 +57,46 @@ export class TestGateway implements OnGatewayConnection, OnGatewayDisconnect {
   server: Server;
 
   private logger: Logger = new Logger('TestGateway');
+  private activeTests: Map<string, OnlineTestExam> = new Map();
 
-  constructor(private readonly geminiFlashService: GeminiFlashService) {}
+  constructor(
+    private readonly geminiFlashService: GeminiFlashService,
+    private readonly testService: TestService,
+  ) {}
 
   async handleConnection(client: Socket) {
     this.logger.log(`Client connected: ${client.id}`);
-    return;
-    // try {
-    // const test = await this.geminiFlashService.generateTest(
-    //   'Math',
-    //   'Algebra',
-    //   'Easy',
-    //   'Multiple Choice',
-    //   30,
-    //   'English',
-    // );
-    // this.logger.log('Test generated successfully', test);
-    // client.emit(EVENTS.TEST_CREATED, test);
-    // } catch (error) {
-    //   this.logger.error('Error generating test:', error);
-    //   client.emit(EVENTS.ERROR, { message: 'Failed to generate test' });
-    // }
   }
 
   handleDisconnect(client: Socket) {
     this.logger.log(`Client disconnected: ${client.id}`);
+    this.removeClientFromTests(client);
   }
 
-  private isValidPayload(payload: any, requiredFields: string[]): boolean {
-    return requiredFields.every((field) => payload.hasOwnProperty(field));
+  private removeClientFromTests(client: Socket) {
+    for (const [testId, test] of this.activeTests.entries()) {
+      if (!test || !test.participants) continue; // Xatolikni oldini olish
+
+      const index = test.participants.findIndex((p) => p.id === client.id);
+      if (index !== -1) {
+        test.participants.splice(index, 1); // Ishtirokchini olib tashlash
+        this.logger.log(`Client ${client.id} left test: ${testId}`);
+
+        this.server
+          .to(`test:${testId}`)
+          .emit(EVENTS.USER_LEFT, { userId: client.id });
+
+        // Agar testda hech kim qolmagan bo'lsa, testni o‘chiramiz
+        if (test.participants.length === 0) {
+          this.activeTests.delete(testId);
+          this.logger.log(`Test ${testId} ended (no participants left).`);
+        }
+      }
+    }
   }
 
   @SubscribeMessage(EVENTS.CREATE_TEST_BY_FORM)
   async handleCreateTestByForm(client: Socket, payload: IPayload) {
-    console.log(payload);
     try {
       const requiredFields = [
         'subject',
@@ -80,99 +114,109 @@ export class TestGateway implements OnGatewayConnection, OnGatewayDisconnect {
         `Client ${client.id} created test: ${payload.subject} - ${payload.topic}`,
       );
 
-      let continueGenerating = true;
-      let generatedPart = 1;
-      let totalParts = 1;
-      let testId = null;
-
-      while (continueGenerating) {
-        const test = await this.geminiFlashService.generateTest(
-          payload.subject,
-          payload.topic,
-          payload.difficulty_level,
-          payload.test_format,
-          payload.number_of_questions,
-          payload.user_prompt,
-        );
-
-        console.log(test);
-
-        if (!testId) {
-          testId = test.test_id;
-        }
-
-        generatedPart = test.generated_part;
-        totalParts = test.total_parts;
-        continueGenerating = test.continue;
-
-        console.log(`Generated part ${generatedPart}/${totalParts}`);
-        client.emit(EVENTS.TEST_CREATED, test);
-
-        if (continueGenerating) {
-          // Keyingi qismni generatsiya qilish
-          const nextPart = await this.geminiFlashService.continueTest(
-            testId,
-            generatedPart + 1,
-            totalParts,
-          );
-
-          // AI natijasini JSON formatga o‘tkazish
-          const parsedNextPart = JSON.parse(nextPart);
-          parsedNextPart.test_id = testId; // Test ID'ni bir xil saqlaymiz
-
-          continueGenerating = parsedNextPart.continue;
-          console.log(
-            `Continuing to part ${parsedNextPart.generated_part}/${parsedNextPart.total_parts}`,
-          );
-          client.emit(EVENTS.TEST_CREATED, parsedNextPart);
-        }
-      }
+      const test = await this.geminiFlashService.generateTest(
+        payload.subject,
+        payload.topic,
+        payload.difficulty_level,
+        payload.test_format,
+        payload.number_of_questions,
+        payload.user_prompt,
+      );
+      this.activeTests.set(test.test_id, test);
+      client.emit(EVENTS.TEST_CREATED, test);
     } catch (error) {
       this.logger.error(`Error creating test: ${error.message}`);
       client.emit(EVENTS.ERROR, { message: error.message });
     }
   }
 
-  @SubscribeMessage(EVENTS.CREATE_TEST_BY_BOOK)
-  async handleCreateTestByBook(client: Socket, payload: any) {
-    try {
-      if (!payload.testId) {
-        throw new BadRequestException('testId is required');
-      }
-
-      client.join(`test:${payload.testId}`);
-      this.logger.log(
-        `Client ${client.id} created test by book: ${payload.testId}`,
-      );
-
-      return { event: EVENTS.TEST_CREATED, data: { testId: payload.testId } };
-    } catch (error) {
-      this.logger.error(`Error creating test by book: ${error.message}`);
-      client.emit(EVENTS.ERROR, { message: error.message });
-    }
+  @SubscribeMessage(EVENTS.START_TEST)
+  async handleStartTest(client: Socket, payload: any) {
+    const { test, tempCode } = await this.testService.createTest(payload);
+    console.log(tempCode);
+    this.server.to(client.id).emit(EVENTS.START_TEST, { test, tempCode });
+    this.logger.log(`Test ${test.id} started.`);
   }
 
   @SubscribeMessage(EVENTS.JOIN_TEST)
-  handleJoinTest(client: Socket, payload: { testId: string }) {
-    client.join(`test:${payload.testId}`);
-    this.logger.log(`Client ${client.id} joined test: ${payload.testId}`);
-    return { event: EVENTS.JOIN_TEST, data: { testId: payload.testId } };
+  async handleJoinTest(client: Socket, payload: { tempCode: number }) {
+    try {
+      const tempCode = Number(payload.tempCode);
+      const tempCodeWithTest = await this.testService.findByTempCode(tempCode);
+      if (!tempCodeWithTest) {
+        return client.emit(EVENTS.ERROR, {
+          message: 'Invalid code. Please recheck your code!',
+        });
+      }
+
+      const test = await this.testService.findTest(tempCodeWithTest.testId);
+      let testInstance = this.activeTests.get(test.id);
+
+      if (!testInstance) {
+        testInstance = {
+          id: test.id,
+          isStarted: false,
+          isFinished: false,
+          time: '60m',
+          participants: [],
+          questions: test.questions || [],
+        };
+        this.activeTests.set(test.id, testInstance);
+      }
+
+      client.join(`test:${test.id}`);
+      testInstance.participants.push({
+        id: client.id,
+        firstName: 'Unknown',
+        lastName: 'User',
+        email: 'unknown@example.com',
+      });
+
+      this.server.to(`test:${test.id}`).emit(EVENTS.USER_JOINED, {
+        testId: test.id,
+        userId: client.id,
+        test: test,
+      });
+
+      this.logger.log(`Client ${client.id} joined test: ${test.id}`);
+    } catch (error) {
+      this.logger.error(`Error joining test: ${error.message}`);
+      client.emit(EVENTS.ERROR, {
+        message: 'An error occurred while joining the test.',
+      });
+    }
   }
 
   @SubscribeMessage(EVENTS.LEAVE_TEST)
-  handleLeaveTest(client: Socket, payload: { testId: string }) {
-    client.leave(`test:${payload.testId}`);
-    this.logger.log(`Client ${client.id} left test: ${payload.testId}`);
-    return { event: EVENTS.LEAVE_TEST, data: { testId: payload.testId } };
+  async handleLeaveTest(client: Socket, payload: { testId: string }) {
+    const test = this.activeTests.get(payload.testId);
+
+    if (test) {
+      test.participants = test.participants.filter((p) => p.id !== client.id);
+      client.leave(`test:${payload.testId}`);
+
+      this.logger.log(`Client ${client.id} left test: ${payload.testId}`);
+
+      this.server.to(`test:${payload.testId}`).emit(EVENTS.USER_LEFT, {
+        testId: payload.testId,
+        userId: client.id,
+      });
+
+      if (test.participants.length === 0) {
+        this.activeTests.delete(payload.testId);
+        this.logger.log(`Test ${payload.testId} ended (no participants left).`);
+      }
+    } else {
+      client.emit(EVENTS.ERROR, { message: 'Test not found!' });
+    }
   }
 
   @SubscribeMessage(EVENTS.SUBMIT_ANSWER)
   handleSubmitAnswer(client: Socket, payload: { testId: string; answer: any }) {
-    this.server.to(`test:${payload.testId}`).emit('answerSubmitted', {
+    this.server.to(`test:${payload.testId}`).emit(EVENTS.ANSWER_SUBMITTED, {
       clientId: client.id,
       answer: payload.answer,
     });
-    return { event: EVENTS.SUBMIT_ANSWER, data: { testId: payload.testId } };
   }
 
   @SubscribeMessage(EVENTS.TEST_PROGRESS)
@@ -180,13 +224,13 @@ export class TestGateway implements OnGatewayConnection, OnGatewayDisconnect {
     client: Socket,
     payload: { testId: string; progress: number },
   ) {
-    this.server.to(`test:${payload.testId}`).emit('progressUpdated', {
+    this.server.to(`test:${payload.testId}`).emit(EVENTS.PROGRESS_UPDATED, {
       clientId: client.id,
       progress: payload.progress,
     });
-    return {
-      event: EVENTS.TEST_PROGRESS,
-      data: { testId: payload.testId, progress: payload.progress },
-    };
+  }
+
+  private isValidPayload(payload: any, requiredFields: string[]): boolean {
+    return requiredFields.every((field) => payload.hasOwnProperty(field));
   }
 }

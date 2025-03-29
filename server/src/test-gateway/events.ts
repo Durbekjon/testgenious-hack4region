@@ -2,8 +2,10 @@ export const EVENTS = {
   TEST_CREATED: 'test:created',
   TEST_UPDATED: 'test:updated',
   TEST_DELETED: 'test:deleted',
-  USER_JOINED_TEST: 'user:joined:test',
-  USER_LEFT_TEST: 'user:left:test',
+  START_TEST: 'test:started',
+
+  USER_JOINED: 'user:joined:test',
+  USER_LEFT: 'user:left:test',
   USER_USED_A_CHEAT: 'user:used:a:cheat',
   USER_SUBMITTED_ANSWER: 'user:submitted:answer',
   USER_GOT_SCORE: 'user:got:score',
