@@ -90,8 +90,8 @@ export class TestService {
       },
     });
   }
-  findByTempCode(tempCode: number) {
-    return this.prisma.tempCode.findUnique({
+  async findByTempCode(tempCode: number) {
+    return await this.prisma.tempCode.findUnique({
       where: { code: tempCode },
       include: { test: true },
     });

@@ -167,8 +167,8 @@ export class TestGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.join(`test:${test.id}`);
       testInstance.participants.push({
         id: client.id,
-        firstName: 'Unknown',
-        lastName: 'User',
+        firstName: 'Durbek',
+        lastName: 'Saydaliyev',
         email: 'unknown@example.com',
       });
 
